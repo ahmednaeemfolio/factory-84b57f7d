@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  MEMBER
+  ADMIN
+}
+
+enum ReportStatus {
+  OPEN
+  DISMISSED
+  HIDDEN
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  users User[]
+}
+
+model User {
+  id                        String    @id @default(cuid())
+  email                     String    @unique
+  passwordHash              String
+  displayName               String
+  role                      UserRole  @default(MEMBER)
+  teamId                    String
+  lastNotificationsOpenedAt DateTime? @db.Timestamptz(3)
+  createdAt                 DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime  @updatedAt @db.Timestamptz(3)
+
+  team            Team             @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sentKudos       Kudos[]          @relation("KudosSender")
+  receivedKudos   KudosRecipient[] @relation("KudosRecipientUser")
+  reactions       KudosReaction[]  @relation("ReactionUser")
+  comments        Comment[]        @relation("CommentAuthor")
+  reports         KudosReport[]    @relation("ReportReporter")
+  resolvedReports KudosReport[]    @relation("ReportResolver")
+
+  @@index([teamId])
+}
+
+model Kudos {
+  id           String   @id @default(cuid())
+  senderId     String
+  message      String
+  companyValue String
+  isHidden     Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  sender     User             @relation("KudosSender", fields: [senderId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  recipients KudosRecipient[]
+  reactions  KudosReaction[]
+  comments   Comment[]
+  reports    KudosReport[]
+
+  @@index([senderId])
+  @@index([createdAt])
+  @@index([isHidden, createdAt])
+}
+
+model KudosRecipient {
+  id          String   @id @default(cuid())
+  kudosId     String
+  recipientId String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  kudos     Kudos @relation(fields: [kudosId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  recipient User  @relation("KudosRecipientUser", fields: [recipientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([kudosId, recipientId])
+  @@index([recipientId])
+}
+
+model KudosReaction {
+  id           String   @id @default(cuid())
+  kudosId      String
+  userId       String
+  reactionType String
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  kudos Kudos @relation(fields: [kudosId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user  User  @relation("ReactionUser", fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([kudosId, userId])
+  @@index([userId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  kudosId   String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  kudos  Kudos @relation(fields: [kudosId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  author User  @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([kudosId, createdAt])
+  @@index([authorId])
+}
+
+model KudosReport {
+  id           String       @id @default(cuid())
+  kudosId      String
+  reporterId   String
+  reason       String
+  status       ReportStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?    @db.Timestamptz(3)
+  createdAt    DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @db.Timestamptz(3)
+
+  kudos      Kudos  @relation(fields: [kudosId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  reporter   User   @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  resolvedBy User?  @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([kudosId, reporterId])
+  @@index([status, createdAt])
+  @@index([reporterId])
+  @@index([resolvedById])
+}
